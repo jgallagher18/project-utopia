@@ -39,7 +39,7 @@ export async function fetchPosts({ limit = 20, before = null } = {}) {
   try {
     let query = supabase
       .from("posts")
-      .select("id, content, created_at, like_count, reply_count, repost_count, user_id, users!posts_user_id_fkey(username, human_verified, avatar_url, display_name)")
+      .select("id, content, created_at, like_count, reply_count, repost_count, user_id, room, users!posts_user_id_fkey(username, human_verified, avatar_url, display_name)")
       .order("created_at", { ascending: false })
       .limit(limit);
 
@@ -64,6 +64,7 @@ export async function fetchPosts({ limit = 20, before = null } = {}) {
       likes: p.like_count,
       replies: p.reply_count,
       reposts: p.repost_count,
+      room: p.room || null,
     }));
   } catch (err) {
     console.error("fetchPosts failed:", err);
@@ -140,12 +141,14 @@ export async function fetchUserPreferences(userId) {
   }
 }
 
-export async function createPost(userId, content) {
+export async function createPost(userId, content, room = null) {
   if (!supabase) return null;
   try {
+    const row = { user_id: userId, content };
+    if (room) row.room = room;
     const { error } = await supabase
       .from("posts")
-      .insert({ user_id: userId, content });
+      .insert(row);
 
     if (error) throw error;
     return { success: true };
@@ -211,7 +214,7 @@ export async function fetchUserPosts(userId) {
   try {
     const { data, error } = await supabase
       .from("posts")
-      .select("id, content, created_at, like_count, reply_count, repost_count, user_id, users!posts_user_id_fkey(username, human_verified, avatar_url, display_name)")
+      .select("id, content, created_at, like_count, reply_count, repost_count, user_id, room, users!posts_user_id_fkey(username, human_verified, avatar_url, display_name)")
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
 
@@ -231,6 +234,7 @@ export async function fetchUserPosts(userId) {
       likes: p.like_count,
       replies: p.reply_count,
       reposts: p.repost_count,
+      room: p.room || null,
     }));
   } catch (err) {
     console.error("fetchUserPosts failed:", err);
@@ -628,28 +632,105 @@ export async function getOrCreateConversation(userId1, userId2) {
 export async function fetchConversations(userId) {
   if (!supabase) return null;
   try {
-    const { data, error } = await supabase
+    // Fetch 1-on-1 conversations
+    const { data: dmData, error: dmError } = await supabase
       .from("conversations")
-      .select("id, updated_at, user1_id, user2_id, user1:user1_id(username, display_name, avatar_url), user2:user2_id(username, display_name, avatar_url)")
+      .select("id, updated_at, is_group, name, user1_id, user2_id, user1:user1_id(username, display_name, avatar_url), user2:user2_id(username, display_name, avatar_url)")
       .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
       .order("updated_at", { ascending: false });
 
-    if (error) throw error;
+    if (dmError) throw dmError;
 
-    return data.map((c) => {
+    const dmConvos = (dmData || []).map((c) => {
+      if (c.is_group) return null; // skip groups fetched via user1/user2
       const other = c.user1_id === userId ? c.user2 : c.user1;
       const otherId = c.user1_id === userId ? c.user2_id : c.user1_id;
       return {
         id: c.id,
+        isGroup: false,
         otherUserId: otherId,
-        otherUsername: other.username,
-        otherDisplayName: other.display_name,
-        otherAvatar: other.avatar_url,
+        otherUsername: other?.username,
+        otherDisplayName: other?.display_name,
+        otherAvatar: other?.avatar_url,
         updatedAt: new Date(c.updated_at).getTime(),
       };
-    });
+    }).filter(Boolean);
+
+    // Fetch group conversations the user is a member of
+    const { data: memberData } = await supabase
+      .from("conversation_members")
+      .select("conversation_id")
+      .eq("user_id", userId);
+
+    let groupConvos = [];
+    if (memberData && memberData.length > 0) {
+      const groupIds = memberData.map((m) => m.conversation_id);
+      const { data: groupData } = await supabase
+        .from("conversations")
+        .select("id, updated_at, is_group, name")
+        .in("id", groupIds)
+        .eq("is_group", true)
+        .order("updated_at", { ascending: false });
+
+      if (groupData) {
+        for (const g of groupData) {
+          const { data: members } = await supabase
+            .from("conversation_members")
+            .select("user_id, users:user_id(username, display_name, avatar_url)")
+            .eq("conversation_id", g.id);
+
+          groupConvos.push({
+            id: g.id,
+            isGroup: true,
+            name: g.name || "Group Chat",
+            members: (members || []).map((m) => ({
+              userId: m.user_id,
+              username: m.users?.username,
+              displayName: m.users?.display_name,
+              avatar: m.users?.avatar_url,
+            })),
+            updatedAt: new Date(g.updated_at).getTime(),
+          });
+        }
+      }
+    }
+
+    // Merge and sort by updated_at
+    return [...dmConvos, ...groupConvos].sort((a, b) => b.updatedAt - a.updatedAt);
   } catch (err) {
     console.error("fetchConversations failed:", err);
+    return null;
+  }
+}
+
+export async function createGroupConversation(creatorId, memberIds, name) {
+  if (!supabase) return null;
+  try {
+    // Create the conversation
+    const { data: convo, error: convoError } = await supabase
+      .from("conversations")
+      .insert({ is_group: true, name: name || "Group Chat" })
+      .select("id")
+      .single();
+
+    if (convoError) throw convoError;
+
+    // Add all members (including creator)
+    const allMembers = [creatorId, ...memberIds.filter((id) => id !== creatorId)];
+    const membersToInsert = allMembers.map((uid) => ({
+      conversation_id: convo.id,
+      user_id: uid,
+    }));
+
+    const { error: membersError } = await supabase
+      .from("conversation_members")
+      .insert(membersToInsert);
+
+    if (membersError) throw membersError;
+
+    return convo.id;
+  } catch (err) {
+    console.error("createGroupConversation failed:", err);
     return null;
   }
 }
@@ -659,7 +740,7 @@ export async function fetchMessages(conversationId, { limit = 50 } = {}) {
   try {
     const { data, error } = await supabase
       .from("messages")
-      .select("id, content, created_at, sender_id, sender:sender_id(username)")
+      .select("id, content, created_at, sender_id, sender:sender_id(username, display_name, avatar_url)")
       .eq("conversation_id", conversationId)
       .order("created_at", { ascending: true })
       .limit(limit);
@@ -670,6 +751,8 @@ export async function fetchMessages(conversationId, { limit = 50 } = {}) {
       id: m.id,
       senderId: m.sender_id,
       senderName: m.sender.username,
+      senderDisplayName: m.sender.display_name,
+      senderAvatar: m.sender.avatar_url,
       content: m.content,
       timestamp: new Date(m.created_at).getTime(),
     }));

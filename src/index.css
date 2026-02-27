@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+:root {
+  --utopia-bg: #f5f0e8;
+  --utopia-accent: #ff6600;
+  --utopia-border: #222222;
+}
+
+body {
+  margin: 0;
+  font-family: "Courier New", Courier, monospace;
+  background: var(--utopia-bg);
+  color: #1a1a1a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+input:focus {
+  outline: 2px solid var(--utopia-accent);
+  outline-offset: -2px;
+}
+
+@keyframes utopia-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}

@@ -213,6 +213,9 @@ function StyleTag({ accent = DEFAULT_ACCENT }) {
       .room-pill { transition: all 150ms ease; cursor: pointer; border: none; font-family: inherit; }
       .room-pill:hover { filter: brightness(1.2); }
 
+      .avatar-upload-overlay { pointer-events: none; }
+      *:hover > .avatar-upload-overlay { opacity: 1 !important; }
+
       .left-sidebar { width: 275px; flex-shrink: 0; position: sticky; top: 0; height: 100vh; overflow-y: auto; display: flex; flex-direction: column; padding: 0 12px; }
       .left-sidebar .nav-label { display: inline; }
       .left-sidebar .room-labels { display: block; }
@@ -1041,14 +1044,17 @@ function Top8({ top8, isOwnProfile, onRemoveFromTop8, onNavigateToProfile, accen
 
 // ─── Profile View ─────────────────────────────────────────────────────────
 
-function ProfileView({ user, posts, top8, playlist, appUserId, viewedUserId, onUserUpdated, isOwnProfile, isFollowing, isInMyTop8, onFollowToggle, onAddToTop8, onRemoveFromTop8, onNavigateToProfile, onBack, onAddTrack, onRemoveTrack, onReorderTrack, onSendMessage, onAvatarUpload, accent = DEFAULT_ACCENT }) {
+function ProfileView({ user, posts, top8, playlist, appUserId, viewedUserId, onUserUpdated, isOwnProfile, isFollowing, isInMyTop8, onFollowToggle, onAddToTop8, onRemoveFromTop8, onNavigateToProfile, onBack, onAddTrack, onRemoveTrack, onReorderTrack, onSendMessage, onAvatarUpload, likedPostIds, repostedPostIds, onToggleLike, onToggleRepost, onDeletePost, accent = DEFAULT_ACCENT }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editDisplayName, setEditDisplayName] = useState("");
   const [editBio, setEditBio] = useState("");
   const [editError, setEditError] = useState(null);
   const [editSaving, setEditSaving] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [activeTab, setActiveTab] = useState("posts");
   const avatarInputRef = useRef(null);
+  const [expandedReplies, setExpandedReplies] = useState(new Set());
+  const [repliesCache, setRepliesCache] = useState({});
 
   const startEditing = () => { setEditDisplayName(user.displayName || ""); setEditBio(user.bio || ""); setEditError(null); setIsEditing(true); };
   const cancelEditing = () => { setIsEditing(false); setEditError(null); };
@@ -1062,35 +1068,59 @@ function ProfileView({ user, posts, top8, playlist, appUserId, viewedUserId, onU
     setIsEditing(false); onUserUpdated();
   };
 
-  const inputStyle = { background: R.search, border: `1px solid ${R.border}`, borderRadius: 8, padding: "10px 12px", color: R.text, fontSize: 15, fontFamily: "inherit", width: "100%" };
+  const handleToggleReplies = async (postId) => {
+    const next = new Set(expandedReplies);
+    if (next.has(postId)) { next.delete(postId); } else {
+      next.add(postId);
+      if (!repliesCache[postId]) { const data = await fetchReplies(postId); if (data) setRepliesCache((prev) => ({ ...prev, [postId]: data })); }
+    }
+    setExpandedReplies(next);
+  };
+
+  const handleCreateReply = async (postId, content) => {
+    if (!appUserId) return;
+    await createReply(postId, appUserId, content);
+    const data = await fetchReplies(postId);
+    if (data) setRepliesCache((prev) => ({ ...prev, [postId]: data }));
+  };
+
+  const handleAvatarClick = () => {
+    if (isOwnProfile && onAvatarUpload) avatarInputRef.current?.click();
+  };
+
+  const inputStyle = { background: R.search, border: `1px solid ${R.border}`, borderRadius: 12, padding: "12px 14px", color: R.text, fontSize: 15, fontFamily: "inherit", width: "100%" };
+
+  const tabs = [
+    { id: "posts", label: "Posts", count: posts.length },
+    { id: "top8", label: "Top 8", count: top8.length },
+    { id: "music", label: "Music", count: playlist.length },
+  ];
 
   return (
     <div>
-      {/* Back header */}
-      {!isOwnProfile && onBack && (
-        <div style={{ display: "flex", alignItems: "center", gap: 20, padding: "8px 16px", position: "sticky", top: 0, zIndex: 20, background: "rgba(10,10,10,0.75)", backdropFilter: "blur(12px)" }}>
-          <button onClick={onBack} style={{ background: "none", border: "none", color: R.text, cursor: "pointer", padding: 8, borderRadius: "50%", display: "flex" }} className="nav-item-hover">
+      {/* Sticky Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "8px 16px", position: "sticky", top: 0, zIndex: 20, background: "rgba(10,10,10,0.75)", backdropFilter: "blur(12px)", borderBottom: `1px solid ${R.border}` }}>
+        {!isOwnProfile && onBack && (
+          <button onClick={onBack} style={{ background: "none", border: "none", color: R.text, cursor: "pointer", padding: 8, borderRadius: "50%", display: "flex", flexShrink: 0 }} className="nav-item-hover">
             <ArrowLeft size={20} />
           </button>
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 20, color: R.text }}>{user.displayName}</div>
-            <div style={{ color: R.gray, fontSize: 13 }}>{posts.length} posts</div>
-          </div>
-        </div>
-      )}
-      {isOwnProfile && (
-        <div style={{ padding: "8px 16px", position: "sticky", top: 0, zIndex: 20, background: "rgba(10,10,10,0.75)", backdropFilter: "blur(12px)" }}>
+        )}
+        <div>
           <div style={{ fontWeight: 800, fontSize: 20, color: R.text }}>{user?.displayName || "Profile"}</div>
+          <div style={{ color: R.gray, fontSize: 13 }}>{posts.length} posts</div>
         </div>
-      )}
+      </div>
 
       {/* Banner */}
-      <div style={{ height: 200, background: `linear-gradient(135deg, ${accent}30, ${R.card})` }} />
+      <div style={{ height: 200, background: `linear-gradient(135deg, ${accent}40, ${accent}10, ${R.card})`, position: "relative" }}>
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, transparent 60%, rgba(10,10,10,0.3))" }} />
+      </div>
 
       {/* Avatar + Actions */}
       <div style={{ padding: "0 16px", position: "relative" }}>
-        <div style={{ marginTop: -68, display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 12 }}>
-          <div style={{ position: "relative" }}>
+        <div style={{ marginTop: -68, display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16 }}>
+          {/* Avatar with upload overlay */}
+          <div style={{ position: "relative", cursor: isOwnProfile && onAvatarUpload ? "pointer" : "default" }} onClick={handleAvatarClick}>
             <div style={{ width: 134, height: 134, borderRadius: "50%", border: `4px solid ${R.bg}`, overflow: "hidden", background: R.search, display: "flex", alignItems: "center", justifyContent: "center" }}>
               {user?.avatar ? (
                 <img src={user.avatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -1098,47 +1128,54 @@ function ProfileView({ user, posts, top8, playlist, appUserId, viewedUserId, onU
                 <User size={60} style={{ color: R.gray }} />
               )}
             </div>
+            {/* Camera overlay on hover */}
+            {isOwnProfile && onAvatarUpload && (
+              <div style={{ position: "absolute", inset: 4, borderRadius: "50%", background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", opacity: avatarUploading ? 1 : 0, transition: "opacity 200ms" }} className="avatar-upload-overlay">
+                {avatarUploading ? <Loader2 size={24} style={{ color: "#fff" }} /> : <ImagePlus size={24} style={{ color: "#fff" }} />}
+              </div>
+            )}
+            <input ref={avatarInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" style={{ display: "none" }} onChange={async (e) => {
+              const file = e.target.files?.[0]; if (!file) return;
+              setAvatarUploading(true); await onAvatarUpload(file); setAvatarUploading(false);
+            }} />
           </div>
+
+          {/* Action Buttons */}
           <div style={{ display: "flex", gap: 8 }}>
-            {isOwnProfile && appUserId && (
+            {isOwnProfile && (
               <>
-                {onAvatarUpload && (
+                {isEditing ? (
                   <>
-                    <input ref={avatarInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" style={{ display: "none" }} onChange={async (e) => {
-                      const file = e.target.files?.[0]; if (!file) return;
-                      setAvatarUploading(true); await onAvatarUpload(file); setAvatarUploading(false);
-                    }} />
-                    <button onClick={() => avatarInputRef.current?.click()} disabled={avatarUploading} style={{ background: "transparent", border: `1px solid ${R.border}`, color: R.text, borderRadius: 9999, padding: "0 16px", height: 36, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
-                      {avatarUploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                    <button onClick={cancelEditing} style={{ background: "transparent", border: `1px solid ${R.border}`, color: R.text, borderRadius: 9999, padding: "0 16px", height: 36, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
+                    <button onClick={handleSave} disabled={editSaving} className="post-btn-main" style={{ background: accent, border: "none", color: "#fff", borderRadius: 9999, padding: "0 20px", height: 36, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", opacity: editSaving ? 0.6 : 1 }}>
+                      {editSaving ? "Saving..." : "Save"}
                     </button>
                   </>
-                )}
-                <button onClick={isEditing ? handleSave : startEditing} disabled={editSaving} style={{ background: isEditing ? accent : "transparent", border: isEditing ? "none" : `1px solid ${R.border}`, color: isEditing ? "#fff" : R.text, borderRadius: 9999, padding: "0 16px", height: 36, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
-                  {isEditing ? (editSaving ? "Saving..." : "Save") : "Edit profile"}
-                </button>
-                {isEditing && (
-                  <button onClick={cancelEditing} style={{ background: "transparent", border: `1px solid ${R.border}`, color: R.text, borderRadius: 9999, padding: "0 16px", height: 36, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
+                ) : (
+                  <button onClick={appUserId ? startEditing : undefined} style={{ background: "transparent", border: `1px solid ${R.border}`, color: R.text, borderRadius: 9999, padding: "0 20px", height: 36, fontSize: 14, fontWeight: 700, cursor: appUserId ? "pointer" : "default", fontFamily: "inherit" }}>
+                    Edit profile
+                  </button>
                 )}
               </>
             )}
-            {!isOwnProfile && appUserId && (
+            {!isOwnProfile && (
               <>
-                {onSendMessage && (
+                {onSendMessage && appUserId && (
                   <button onClick={() => onSendMessage(viewedUserId)} style={{ background: "transparent", border: `1px solid ${R.border}`, color: R.text, borderRadius: "50%", width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
                     <Mail size={18} />
                   </button>
                 )}
-                {onFollowToggle && (
+                {onFollowToggle && appUserId && (
                   <button
                     onClick={onFollowToggle}
                     className={`follow-btn${isFollowing ? " follow-btn-following" : ""}`}
-                    style={{ borderRadius: 9999, padding: "0 16px", height: 36, fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", background: isFollowing ? "transparent" : "#eff3f4", color: isFollowing ? R.text : "#0f1419", border: isFollowing ? `1px solid ${R.border}` : "none" }}
+                    style={{ borderRadius: 9999, padding: "0 20px", height: 36, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", background: isFollowing ? "transparent" : "#eff3f4", color: isFollowing ? R.text : "#0f1419", border: isFollowing ? `1px solid ${R.border}` : "none" }}
                   >
                     {isFollowing ? "Following" : "Follow"}
                   </button>
                 )}
                 {isFollowing && !isInMyTop8 && onAddToTop8 && (
-                  <button onClick={onAddToTop8} style={{ background: "transparent", border: `1px solid ${R.border}`, color: R.text, borderRadius: 9999, padding: "0 16px", height: 36, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 4 }}>
+                  <button onClick={onAddToTop8} style={{ background: "transparent", border: `1px solid ${R.border}`, color: R.text, borderRadius: 9999, padding: "0 16px", height: 36, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 4 }}>
                     <Star size={14} /> Top 8
                   </button>
                 )}
@@ -1149,62 +1186,121 @@ function ProfileView({ user, posts, top8, playlist, appUserId, viewedUserId, onU
 
         {/* User Info */}
         {isEditing ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 20 }}>
             <div>
-              <label style={{ color: R.gray, fontSize: 13, marginBottom: 4, display: "block" }}>Name</label>
-              <input value={editDisplayName} onChange={(e) => setEditDisplayName(e.target.value)} style={inputStyle} />
+              <label style={{ color: R.gray, fontSize: 13, fontWeight: 600, marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Display Name</label>
+              <input value={editDisplayName} onChange={(e) => setEditDisplayName(e.target.value)} maxLength={50} style={inputStyle} />
             </div>
             <div>
-              <label style={{ color: R.gray, fontSize: 13, marginBottom: 4, display: "block" }}>Bio</label>
-              <textarea value={editBio} onChange={(e) => setEditBio(e.target.value)} rows={3} style={{ ...inputStyle, resize: "none" }} />
+              <label style={{ color: R.gray, fontSize: 13, fontWeight: 600, marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: 0.5 }}>Bio</label>
+              <textarea value={editBio} onChange={(e) => setEditBio(e.target.value)} rows={3} maxLength={160} placeholder="Tell the world about yourself..." style={{ ...inputStyle, resize: "none" }} />
+              <div style={{ textAlign: "right", fontSize: 12, color: editBio.length > 140 ? R.pink : R.gray, marginTop: 4 }}>{editBio.length}/160</div>
             </div>
-            {editError && <div style={{ color: R.pink, fontSize: 14 }}>{editError}</div>}
+            {editError && <div style={{ color: R.pink, fontSize: 14, background: `${R.pink}15`, padding: "8px 12px", borderRadius: 8 }}>{editError}</div>}
           </div>
         ) : (
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 20, fontWeight: 800, color: R.text }}>{user?.displayName}</div>
-            <div style={{ color: R.gray, fontSize: 15 }}>@{user?.name}</div>
-            {user?.bio && <div style={{ color: R.text, fontSize: 15, marginTop: 12, lineHeight: "20px", whiteSpace: "pre-wrap" }}>{user.bio}</div>}
-            <div style={{ display: "flex", gap: 4, marginTop: 12, color: R.gray, fontSize: 15 }}>
-              <Calendar size={16} /> Joined {user?.joinDate}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 22, fontWeight: 800, color: R.text }}>{user?.displayName}</span>
+              {user?.humanVerified && <VerifiedBadge accent={accent} />}
             </div>
-            <div style={{ display: "flex", gap: 20, marginTop: 12, fontSize: 15 }}>
-              <span><strong style={{ color: R.text }}>{user?.following || 0}</strong> <span style={{ color: R.gray }}>Following</span></span>
-              <span><strong style={{ color: R.text }}>{user?.followers || 0}</strong> <span style={{ color: R.gray }}>Followers</span></span>
+            <div style={{ color: R.gray, fontSize: 15, marginTop: 2 }}>@{user?.name}</div>
+
+            {/* Bio */}
+            {user?.bio ? (
+              <div style={{ color: R.text, fontSize: 15, marginTop: 12, lineHeight: "22px", whiteSpace: "pre-wrap" }}>{renderContent(user.bio, accent)}</div>
+            ) : isOwnProfile ? (
+              <div onClick={appUserId ? startEditing : undefined} style={{ color: R.gray, fontSize: 15, marginTop: 12, lineHeight: "22px", cursor: appUserId ? "pointer" : "default", fontStyle: "italic" }}>
+                Add a bio to tell people about yourself...
+              </div>
+            ) : null}
+
+            {/* Meta row */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 12, color: R.gray, fontSize: 14 }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <Calendar size={15} /> Joined {user?.joinDate}
+              </span>
+            </div>
+
+            {/* Stats */}
+            <div style={{ display: "flex", gap: 20, marginTop: 12, fontSize: 14 }}>
+              <span style={{ cursor: "pointer" }}>
+                <strong style={{ color: R.text, fontWeight: 800 }}>{formatCount(user?.following || 0)}</strong>{" "}
+                <span style={{ color: R.gray }}>Following</span>
+              </span>
+              <span style={{ cursor: "pointer" }}>
+                <strong style={{ color: R.text, fontWeight: 800 }}>{formatCount(user?.followers || 0)}</strong>{" "}
+                <span style={{ color: R.gray }}>Followers</span>
+              </span>
             </div>
           </div>
         )}
       </div>
 
-      {/* Music + Top 8 */}
-      <div style={{ padding: "0 16px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 4 }}>
-        <MusicPlayer playlist={playlist} isOwnProfile={isOwnProfile} onAddTrack={onAddTrack} onRemoveTrack={onRemoveTrack} onReorderTrack={onReorderTrack} accent={accent} />
-        <Top8 top8={top8} isOwnProfile={isOwnProfile} onRemoveFromTop8={onRemoveFromTop8} onNavigateToProfile={onNavigateToProfile} accent={accent} />
+      {/* Tabs */}
+      <div style={{ display: "flex", borderBottom: `1px solid ${R.border}` }}>
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className="tab-item"
+            style={{ color: activeTab === tab.id ? R.text : R.gray, fontWeight: activeTab === tab.id ? 700 : 400, position: "relative" }}
+          >
+            {tab.label}
+            {activeTab === tab.id && (
+              <div style={{ position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)", width: 56, height: 4, background: accent, borderRadius: 2 }} />
+            )}
+          </button>
+        ))}
       </div>
 
-      {/* Posts tab header */}
-      <div style={{ borderBottom: `1px solid ${R.border}`, marginTop: 4 }}>
-        <div className="tab-item" style={{ color: R.text, fontWeight: 700, display: "inline-flex", padding: "16px 24px", position: "relative" }}>
-          Posts
-          <div style={{ position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)", width: 56, height: 4, background: accent, borderRadius: 2 }} />
-        </div>
-      </div>
-
-      {/* Posts */}
-      {posts.length === 0 ? (
-        <div style={{ padding: 40, textAlign: "center", color: R.gray, fontSize: 15 }}>No posts yet</div>
-      ) : (
-        posts.map((post) => (
-          <div key={post.id} className="tweet-hover" style={{ padding: "12px 16px", borderBottom: `1px solid ${R.border}` }}>
-            <div style={{ color: R.text, fontSize: 15, lineHeight: "20px", whiteSpace: "pre-wrap" }}>{renderContent(post.content)}</div>
-            <div style={{ color: R.gray, fontSize: 13, marginTop: 8 }}>{timeAgo(post.timestamp)}</div>
-            <div style={{ display: "flex", gap: 16, marginTop: 8, fontSize: 13, color: R.gray }}>
-              <span>{formatCount(post.likes)} likes</span>
-              <span>{formatCount(post.replies)} replies</span>
-              <span>{formatCount(post.reposts || 0)} reposts</span>
+      {/* Tab Content: Posts */}
+      {activeTab === "posts" && (
+        <>
+          {posts.length === 0 ? (
+            <div style={{ padding: 60, textAlign: "center" }}>
+              <div style={{ fontSize: 32, fontWeight: 800, color: R.text, marginBottom: 8 }}>
+                {isOwnProfile ? "You haven't posted yet" : "No posts yet"}
+              </div>
+              <div style={{ color: R.gray, fontSize: 15 }}>
+                {isOwnProfile ? "When you post, it'll show up here." : "When @" + user?.name + " posts, it'll show up here."}
+              </div>
             </div>
-          </div>
-        ))
+          ) : (
+            posts.map((post) => (
+              <Tweet
+                key={post.id}
+                post={post}
+                appUserId={appUserId}
+                accent={accent}
+                isLiked={likedPostIds?.has(post.id)}
+                isReposted={repostedPostIds?.has(post.id)}
+                onToggleLike={onToggleLike}
+                onToggleRepost={onToggleRepost}
+                onDeletePost={onDeletePost}
+                onNavigateToProfile={onNavigateToProfile}
+                onToggleReplies={appUserId ? handleToggleReplies : undefined}
+                repliesExpanded={expandedReplies.has(post.id)}
+                replies={repliesCache[post.id] || null}
+                onCreateReply={handleCreateReply}
+              />
+            ))
+          )}
+        </>
+      )}
+
+      {/* Tab Content: Top 8 */}
+      {activeTab === "top8" && (
+        <div style={{ padding: 16 }}>
+          <Top8 top8={top8} isOwnProfile={isOwnProfile} onRemoveFromTop8={onRemoveFromTop8} onNavigateToProfile={onNavigateToProfile} accent={accent} />
+        </div>
+      )}
+
+      {/* Tab Content: Music */}
+      {activeTab === "music" && (
+        <div style={{ padding: 16 }}>
+          <MusicPlayer playlist={playlist} isOwnProfile={isOwnProfile} onAddTrack={onAddTrack} onRemoveTrack={onRemoveTrack} onReorderTrack={onReorderTrack} accent={accent} />
+        </div>
       )}
     </div>
   );
@@ -2037,6 +2133,11 @@ export default function App() {
               onSendMessage={handleSendMessage}
               onAvatarUpload={handleAvatarUpload}
               onUserUpdated={async () => { const u = await fetchUser(appUserId); if (u) setUser(u); }}
+              likedPostIds={likedPostIds}
+              repostedPostIds={repostedPostIds}
+              onToggleLike={handleToggleLike}
+              onToggleRepost={handleToggleRepost}
+              onDeletePost={handleDeletePost}
               accent={accent}
             />
           )}

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Home, Search, Bell, Mail, Bookmark, User, MoreHorizontal,
+  Home, Search, Bell, Mail, User, MoreHorizontal,
   Heart, MessageCircle, Repeat2, Upload, BarChart2, Smile, Calendar,
   X, Star, LogOut, Pencil, Send, ArrowLeft, ImagePlus,
   Plus, ChevronUp, ChevronDown, Trash2,
@@ -536,15 +536,14 @@ function ComposeBox({ user, appUserId, onPostCreated, accent = DEFAULT_ACCENT, a
 
 // ─── Left Sidebar ─────────────────────────────────────────────────────────
 
-function LeftSidebar({ activeView, setView, user, unreadCount, onSignOut, onPostClick, accent = DEFAULT_ACCENT, activeRoom, onRoomChange }) {
+function LeftSidebar({ activeView, setView, user, unreadCount, onSignOut, onPostClick, accent = DEFAULT_ACCENT, activeRoom, onRoomChange, customRooms = [] }) {
   const [showMenu, setShowMenu] = useState(false);
 
   const navItems = [
     { icon: Home, label: "Home", view: "feed" },
-    { icon: Search, label: "Explore", view: "explore" },
+    { icon: Search, label: "Search", view: "explore" },
     { icon: Bell, label: "Notifications", view: "notifications", badge: unreadCount },
-    { icon: Mail, label: "Messages", view: "messages" },
-    { icon: Bookmark, label: "Bookmarks", view: "bookmarks" },
+    { icon: Mail, label: "Direct Messages", view: "messages" },
     { icon: User, label: "Profile", view: "profile" },
   ];
 
@@ -577,18 +576,13 @@ function LeftSidebar({ activeView, setView, user, unreadCount, onSignOut, onPost
             )}
           </div>
         ))}
-        {/* More */}
-        <div className="nav-item-hover" style={{ display: "flex", alignItems: "center", gap: 20, padding: "12px 12px", cursor: "pointer" }}>
-          <MoreHorizontal size={26} style={{ color: R.text }} strokeWidth={1.5} />
-          <span className="nav-label" style={{ fontSize: 20, color: R.text }}>More</span>
-        </div>
       </nav>
 
       {/* Rooms */}
       {onRoomChange && (
         <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${R.border}` }}>
           <div className="room-labels" style={{ fontSize: 13, fontWeight: 700, color: R.gray, padding: "4px 12px", marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>Rooms</div>
-          {ROOMS.map((room) => (
+          {[...ROOMS, ...customRooms].map((room) => (
             <div
               key={room.id}
               className="nav-item-hover"
@@ -601,6 +595,14 @@ function LeftSidebar({ activeView, setView, user, unreadCount, onSignOut, onPost
               </span>
             </div>
           ))}
+          <div
+            className="nav-item-hover"
+            onClick={() => onRoomChange("__create__")}
+            style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 12px", cursor: "pointer", borderRadius: 20, marginTop: 4 }}
+          >
+            <span style={{ fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center", width: 22, height: 22, borderRadius: "50%", border: `2px dashed ${R.gray}`, color: R.gray, fontWeight: 700 }}>+</span>
+            <span className="nav-label" style={{ fontSize: 15, color: R.gray }}>Create Room</span>
+          </div>
         </div>
       )}
 
@@ -790,7 +792,7 @@ function RightSidebar({ onNavigateToProfile, accent = DEFAULT_ACCENT, onRoomChan
 
 // ─── Feed View ────────────────────────────────────────────────────────────
 
-function FeedView({ posts: allPosts, user, appUserId, onPostCreated, likedPostIds, repostedPostIds, onToggleLike, onToggleRepost, onDeletePost, onNavigateToProfile, hasMore, onLoadMore, loadingMore, accent = DEFAULT_ACCENT, activeRoom, onRoomChange }) {
+function FeedView({ posts: allPosts, user, appUserId, onPostCreated, likedPostIds, repostedPostIds, onToggleLike, onToggleRepost, onDeletePost, onNavigateToProfile, hasMore, onLoadMore, loadingMore, accent = DEFAULT_ACCENT, activeRoom, onRoomChange, customRooms = [] }) {
   const [expandedReplies, setExpandedReplies] = useState(new Set());
   const [repliesCache, setRepliesCache] = useState({});
 
@@ -819,7 +821,8 @@ function FeedView({ posts: allPosts, user, appUserId, onPostCreated, likedPostId
   const sorted = [...allPosts].sort((a, b) => b.timestamp - a.timestamp);
   const posts = activeRoom ? sorted.filter((p) => p.room === activeRoom) : sorted;
 
-  const activeRoomData = getRoomById(activeRoom);
+  const feedRooms = [...ROOMS, ...customRooms];
+  const activeRoomData = feedRooms.find((r) => r.id === activeRoom) || null;
 
   return (
     <div>
@@ -838,7 +841,7 @@ function FeedView({ posts: allPosts, user, appUserId, onPostCreated, likedPostId
         {/* Room pills - mobile */}
         <div className="mobile-room-bar">
           <button className="room-pill" onClick={() => onRoomChange?.(null)} style={{ padding: "4px 12px", borderRadius: 20, fontSize: 13, fontWeight: 600, background: !activeRoom ? `${accent}20` : "transparent", color: !activeRoom ? accent : R.gray, border: `1px solid ${!activeRoom ? accent + "40" : R.border}`, whiteSpace: "nowrap" }}>All</button>
-          {ROOMS.map((room) => (
+          {feedRooms.map((room) => (
             <button key={room.id} className="room-pill" onClick={() => onRoomChange?.(room.id)} style={{ padding: "4px 12px", borderRadius: 20, fontSize: 13, fontWeight: 600, background: activeRoom === room.id ? `${room.accent}20` : "transparent", color: activeRoom === room.id ? room.accent : R.gray, border: `1px solid ${activeRoom === room.id ? room.accent + "40" : R.border}`, whiteSpace: "nowrap" }}>
               {room.emoji} {room.name}
             </button>
@@ -1643,6 +1646,85 @@ function MobileBottomBar({ activeView, setView, unreadCount, accent = DEFAULT_AC
   );
 }
 
+// ─── Create Room Modal ────────────────────────────────────────────────────
+
+const ROOM_COLORS = ["#7C5CFC", "#FF4D6A", "#FFA033", "#3B82F6", "#22C55E", "#E44D90", "#F59E0B", "#8B5CF6", "#06B6D4", "#EF4444"];
+const ROOM_EMOJIS = ["🎵", "🎮", "📚", "🎯", "💬", "🌊", "⚡", "🎭", "🏆", "🌸", "🔮", "🎪", "🧠", "🎬", "🍕"];
+
+function CreateRoomModal({ onClose, onCreate, accent = DEFAULT_ACCENT }) {
+  const [name, setName] = useState("");
+  const [emoji, setEmoji] = useState("💬");
+  const [color, setColor] = useState("#7C5CFC");
+
+  const handleCreate = () => {
+    if (!name.trim()) return;
+    onCreate(name.trim(), emoji, color);
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)" }} onClick={onClose} />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        style={{ position: "relative", background: R.card, borderRadius: 20, padding: 24, width: 380, maxWidth: "90vw", border: `1px solid ${R.border}` }}
+      >
+        <h2 style={{ fontSize: 20, fontWeight: 800, color: R.text, marginBottom: 20 }}>Create a Room</h2>
+
+        {/* Name */}
+        <label style={{ color: R.gray, fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6, display: "block" }}>Room Name</label>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. Music Corner"
+          maxLength={30}
+          style={{ width: "100%", background: R.search, border: `1px solid ${R.border}`, borderRadius: 12, padding: "10px 14px", color: R.text, fontSize: 15, fontFamily: "inherit", marginBottom: 16 }}
+        />
+
+        {/* Emoji */}
+        <label style={{ color: R.gray, fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6, display: "block" }}>Icon</label>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
+          {ROOM_EMOJIS.map((e) => (
+            <button
+              key={e}
+              onClick={() => setEmoji(e)}
+              style={{ width: 36, height: 36, borderRadius: 8, border: emoji === e ? `2px solid ${color}` : `1px solid ${R.border}`, background: emoji === e ? `${color}15` : "transparent", fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+            >
+              {e}
+            </button>
+          ))}
+        </div>
+
+        {/* Color */}
+        <label style={{ color: R.gray, fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6, display: "block" }}>Color</label>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
+          {ROOM_COLORS.map((c) => (
+            <button
+              key={c}
+              onClick={() => setColor(c)}
+              style={{ width: 32, height: 32, borderRadius: "50%", background: c, border: color === c ? "3px solid #fff" : "3px solid transparent", cursor: "pointer", outline: color === c ? `2px solid ${c}` : "none" }}
+            />
+          ))}
+        </div>
+
+        {/* Preview */}
+        {name.trim() && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, padding: "8px 12px", background: `${color}10`, borderRadius: 12 }}>
+            <span style={{ fontSize: 20 }}>{emoji}</span>
+            <span style={{ color, fontWeight: 700, fontSize: 15 }}>{name.trim()}</span>
+          </div>
+        )}
+
+        {/* Buttons */}
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button onClick={onClose} style={{ background: "transparent", border: `1px solid ${R.border}`, color: R.text, borderRadius: 9999, padding: "8px 20px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
+          <button onClick={handleCreate} disabled={!name.trim()} className="post-btn-main" style={{ background: color, color: "#fff", border: "none", borderRadius: 9999, padding: "8px 20px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", opacity: name.trim() ? 1 : 0.5 }}>Create Room</button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 // ─── App ──────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -1671,8 +1753,11 @@ export default function App() {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [activeRoom, setActiveRoom] = useState(null);
+  const [customRooms, setCustomRooms] = useState([]);
+  const [showCreateRoom, setShowCreateRoom] = useState(false);
 
-  const accent = activeRoom ? getAccent(activeRoom) : DEFAULT_ACCENT;
+  const allRooms = [...ROOMS, ...customRooms];
+  const accent = activeRoom ? (allRooms.find((r) => r.id === activeRoom)?.accent || DEFAULT_ACCENT) : DEFAULT_ACCENT;
   const isOwnProfile = !viewedUserId;
   const isInMyTop8 = viewedUserId ? top8.some((t) => t.userId === viewedUserId) : false;
 
@@ -1858,6 +1943,21 @@ export default function App() {
     setView(v);
   }, [handleOpenNotifications]);
 
+  const handleRoomChange = useCallback((roomId) => {
+    if (roomId === "__create__") { setShowCreateRoom(true); return; }
+    setActiveRoom(roomId);
+    setView("feed");
+  }, []);
+
+  const handleCreateRoom = useCallback((name, emoji, color) => {
+    const id = name.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+    if (!id || allRooms.some((r) => r.id === id)) return;
+    setCustomRooms((prev) => [...prev, { id, name, emoji, accent: color, description: "" }]);
+    setShowCreateRoom(false);
+    setActiveRoom(id);
+    setView("feed");
+  }, [allRooms]);
+
   // ─── Loading / Auth Screens ───────────────────────────────────────────
 
   if (authLoading) {
@@ -1888,7 +1988,8 @@ export default function App() {
           onPostClick={() => setView("feed")}
           accent={accent}
           activeRoom={activeRoom}
-          onRoomChange={setActiveRoom}
+          onRoomChange={handleRoomChange}
+          customRooms={customRooms}
         />
 
         {/* Center Column */}
@@ -1910,7 +2011,8 @@ export default function App() {
               onPostCreated={refreshPosts}
               accent={accent}
               activeRoom={activeRoom}
-              onRoomChange={setActiveRoom}
+              onRoomChange={handleRoomChange}
+              customRooms={customRooms}
             />
           )}
           {view === "profile" && (isOwnProfile ? user : viewedUser) && (
@@ -1949,23 +2051,28 @@ export default function App() {
           {view === "messages" && (
             <MessagesView appUserId={appUserId} onNavigateToProfile={navigateToProfile} accent={accent} initialConvoId={pendingConvoId} onClearInitialConvo={() => setPendingConvoId(null)} />
           )}
-          {(view === "explore" || view === "bookmarks") && (
+          {view === "explore" && (
             <div style={{ padding: 40, textAlign: "center", color: R.gray, fontSize: 15 }}>
               <Search size={32} style={{ marginBottom: 12, color: R.gray }} />
-              <div style={{ fontSize: 20, fontWeight: 800, color: R.text, marginBottom: 8 }}>
-                {view === "explore" ? "Explore" : "Bookmarks"}
-              </div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: R.text, marginBottom: 8 }}>Search</div>
               <div>Coming soon</div>
             </div>
           )}
         </main>
 
         {/* Right Sidebar */}
-        <RightSidebar onNavigateToProfile={navigateToProfile} accent={accent} onRoomChange={setActiveRoom} />
+        <RightSidebar onNavigateToProfile={navigateToProfile} accent={accent} onRoomChange={handleRoomChange} />
       </div>
 
       {/* Mobile Bottom Bar */}
       <MobileBottomBar activeView={view} setView={handleSetView} unreadCount={unreadCount} accent={accent} />
+
+      {/* Create Room Modal */}
+      <AnimatePresence>
+        {showCreateRoom && (
+          <CreateRoomModal onClose={() => setShowCreateRoom(false)} onCreate={handleCreateRoom} accent={accent} />
+        )}
+      </AnimatePresence>
     </>
   );
 }

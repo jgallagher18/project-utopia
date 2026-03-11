@@ -48,6 +48,10 @@ create policy "Users can update own posts"
   on posts for update
   using (user_id = (select id from public.users where auth_id = auth.uid()));
 
+create policy "Users can delete own posts"
+  on posts for delete
+  using (user_id = (select id from public.users where auth_id = auth.uid()));
+
 -- ─── Relationships ───────────────────────────────────────────────────────────
 
 create policy "Users can insert own relationships"

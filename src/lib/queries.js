@@ -13,7 +13,7 @@ export async function fetchUser(userId) {
   try {
     const { data, error } = await supabase
       .from("users")
-      .select("username, display_name, bio, avatar_url, created_at, follower_count, following_count")
+      .select("username, display_name, bio, avatar_url, created_at, follower_count, following_count, interests")
       .eq("id", userId)
       .single();
 
@@ -27,10 +27,33 @@ export async function fetchUser(userId) {
       joinDate: formatJoinDate(data.created_at),
       followers: data.follower_count,
       following: data.following_count,
+      interests: data.interests || "",
     };
   } catch (err) {
-    console.error("fetchUser failed:", err);
-    return null;
+    // Fallback: try without interests column (migration may not have run yet)
+    try {
+      const { data, error } = await supabase
+        .from("users")
+        .select("username, display_name, bio, avatar_url, created_at, follower_count, following_count")
+        .eq("id", userId)
+        .single();
+
+      if (error) throw error;
+
+      return {
+        name: data.username,
+        displayName: data.display_name,
+        bio: data.bio,
+        avatar: data.avatar_url,
+        joinDate: formatJoinDate(data.created_at),
+        followers: data.follower_count,
+        following: data.following_count,
+        interests: "",
+      };
+    } catch (err2) {
+      console.error("fetchUser failed:", err2);
+      return null;
+    }
   }
 }
 
@@ -782,8 +805,13 @@ export async function sendMessage(conversationId, senderId, content) {
 export async function uploadAvatar(userId, file) {
   if (!supabase) return null;
   try {
+    // Use auth UID for storage folder (matches storage RLS policies)
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    const authUid = authUser?.id;
+    if (!authUid) throw new Error("Not authenticated");
+
     const ext = file.name.split(".").pop();
-    const path = `${userId}/avatar.${ext}`;
+    const path = `${authUid}/avatar.${ext}`;
 
     const { error: uploadError } = await supabase.storage
       .from("avatars")
@@ -912,6 +940,65 @@ export async function reorderPlaylistTrack(userId, trackId, newPosition) {
   } catch (err) {
     console.error("reorderPlaylistTrack failed:", err);
     return { error: err.message || "Failed to reorder track" };
+  }
+}
+
+// ─── Statuses & Interests ─────────────────────────────────────────────────
+
+export async function fetchUserStatus(userId) {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from("statuses")
+      .select("id, content, emoji, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) return null;
+
+    return {
+      id: data.id,
+      content: data.content,
+      emoji: data.emoji,
+      timestamp: new Date(data.created_at).getTime(),
+    };
+  } catch (err) {
+    console.error("fetchUserStatus failed:", err);
+    return null;
+  }
+}
+
+export async function updateStatus(userId, content, emoji) {
+  if (!supabase) return null;
+  try {
+    const { error } = await supabase
+      .from("statuses")
+      .insert({ user_id: userId, content, emoji: emoji || "💭" });
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err) {
+    console.error("updateStatus failed:", err);
+    return { error: err.message || "Failed to update status" };
+  }
+}
+
+export async function updateUserInterests(userId, interests) {
+  if (!supabase) return null;
+  try {
+    const { error } = await supabase
+      .from("users")
+      .update({ interests })
+      .eq("id", userId);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err) {
+    console.error("updateUserInterests failed:", err);
+    return { error: err.message || "Failed to update interests" };
   }
 }
 

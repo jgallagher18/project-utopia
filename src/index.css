@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  --recess-bg: #0a0a0a;
-  --recess-accent: #7C5CFC;
-  --recess-border: #1e1e1e;
+  --nosta-bg: #0a0a0a;
+  --nosta-accent: #7C5CFC;
+  --nosta-border: #1e1e1e;
 }
 
 body {
   margin: 0;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: var(--recess-bg);
+  background: var(--nosta-bg);
   color: #e7e9ea;
 }
 
@@ -18,11 +18,11 @@ body {
 }
 
 input:focus {
-  outline: 2px solid var(--recess-accent);
+  outline: 2px solid var(--nosta-accent);
   outline-offset: -2px;
 }
 
-@keyframes recess-pulse {
+@keyframes nosta-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
 }

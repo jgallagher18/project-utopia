@@ -17,12 +17,12 @@ import {
   searchUsers, fetchNotifications, markAllNotificationsRead, getUnreadCount,
   getOrCreateConversation, createGroupConversation, fetchConversations, fetchMessages, sendMessage,
   uploadAvatar, updateUserProfile, createPost, deletePost,
-  fetchUserStatus, updateStatus, updateUserInterests,
+  fetchUserStatus, updateStatus, updateUserInterests, updateProfileEmoji,
 } from "./lib/queries";
 import { signUp, signIn, signOut, onAuthChange } from "./lib/auth";
 import { supabase } from "./lib/supabase";
 
-// ─── Recess Color Constants ──────────────────────────────────────────────
+// ─── Nosta Color Constants ───────────────────────────────────────────────
 
 const R = {
   bg: "#0a0a0a",
@@ -62,12 +62,13 @@ function getAccent(roomId) {
 const MOCK_USER = {
   name: "nova_dreams",
   displayName: "Nova",
-  bio: "building recess one vibe at a time. web archaeologist. digital gardener.",
+  bio: "building nosta one vibe at a time. web archaeologist. digital gardener.",
   avatar: null,
   joinDate: "Jan 2025",
   followers: 847,
   following: 312,
   interests: "web design, lo-fi music, retro internet, pixel art",
+  profileEmoji: "✨",
 };
 
 const MOCK_STATUS = { id: "mock-status-1", content: "vibing in the chill zone", emoji: "🧊", timestamp: Date.now() - 30 * 60000 };
@@ -388,6 +389,7 @@ function Tweet({ post, isLiked, isReposted, onToggleLike, onToggleRepost, onDele
             <span className="hover-underline" onClick={(e) => { e.stopPropagation(); onNavigateToProfile?.(post.userId); }} style={{ fontWeight: 700, color: R.text, whiteSpace: "nowrap" }}>
               {post.displayName || post.user}
             </span>
+            {post.profileEmoji && <span style={{ fontSize: 14, flexShrink: 0 }}>{post.profileEmoji}</span>}
             {post.humanVerified && <VerifiedBadge accent={accent} />}
             <span style={{ color: R.gray, whiteSpace: "nowrap" }}>@{post.user}</span>
             <span style={{ color: R.gray }}>&middot;</span>
@@ -773,7 +775,7 @@ function RightSidebar({ onNavigateToProfile, accent = DEFAULT_ACCENT, onRoomChan
               >
                 <Avatar src={u.avatar} size={40} />
                 <div>
-                  <div style={{ fontWeight: 700, color: R.text, fontSize: 15 }}>{u.displayName}</div>
+                  <div style={{ fontWeight: 700, color: R.text, fontSize: 15 }}>{u.displayName} {u.profileEmoji && <span style={{ fontSize: 13 }}>{u.profileEmoji}</span>}</div>
                   <div style={{ color: R.gray, fontSize: 15 }}>@{u.username}</div>
                 </div>
               </div>
@@ -843,7 +845,7 @@ function RightSidebar({ onNavigateToProfile, accent = DEFAULT_ACCENT, onRoomChan
 
       {/* Footer */}
       <div style={{ padding: "16px 0", color: R.gray, fontSize: 13, lineHeight: "20px" }}>
-        &copy; 2025 Recess &middot; Terms &middot; Privacy &middot; Cookies
+        &copy; 2025 Nosta &middot; Terms &middot; Privacy &middot; Cookies
       </div>
     </aside>
   );
@@ -1103,7 +1105,7 @@ function Top8({ top8, isOwnProfile, onRemoveFromTop8, onNavigateToProfile, accen
 
 // ─── Profile View ─────────────────────────────────────────────────────────
 
-function ProfileView({ user, posts, top8, playlist, appUserId, viewedUserId, onUserUpdated, isOwnProfile, isFollowing, isInMyTop8, onFollowToggle, onAddToTop8, onRemoveFromTop8, onNavigateToProfile, onBack, onAddTrack, onRemoveTrack, onReorderTrack, onSendMessage, onAvatarUpload, likedPostIds, repostedPostIds, onToggleLike, onToggleRepost, onDeletePost, accent = DEFAULT_ACCENT, userStatus, onUpdateStatus, onUpdateInterests }) {
+function ProfileView({ user, posts, top8, playlist, appUserId, viewedUserId, onUserUpdated, isOwnProfile, isFollowing, isInMyTop8, onFollowToggle, onAddToTop8, onRemoveFromTop8, onNavigateToProfile, onBack, onAddTrack, onRemoveTrack, onReorderTrack, onSendMessage, onAvatarUpload, likedPostIds, repostedPostIds, onToggleLike, onToggleRepost, onDeletePost, accent = DEFAULT_ACCENT, userStatus, onUpdateStatus, onUpdateInterests, onUpdateProfileEmoji }) {
   const [editingBio, setEditingBio] = useState(false);
   const [editBioText, setEditBioText] = useState("");
   const [editingInterests, setEditingInterests] = useState(false);
@@ -1117,6 +1119,7 @@ function ProfileView({ user, posts, top8, playlist, appUserId, viewedUserId, onU
   const [statusSaving, setStatusSaving] = useState(false);
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
   const [showAvatarLightbox, setShowAvatarLightbox] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   const handleToggleReplies = async (postId) => {
     const next = new Set(expandedReplies);
@@ -1215,8 +1218,31 @@ function ProfileView({ user, posts, top8, playlist, appUserId, viewedUserId, onU
               }} />
             </div>
             <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 20, fontWeight: 800, color: R.text }}>{user?.displayName}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: R.text, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+                {user?.displayName}
+                {isOwnProfile && onUpdateProfileEmoji ? (
+                  <span onClick={(e) => { e.stopPropagation(); setShowEmojiPicker(!showEmojiPicker); }} style={{ cursor: "pointer", fontSize: 18, opacity: user?.profileEmoji ? 1 : 0.4 }} title="Change badge emoji">
+                    {user?.profileEmoji || "＋"}
+                  </span>
+                ) : (
+                  user?.profileEmoji && <span style={{ fontSize: 18 }}>{user.profileEmoji}</span>
+                )}
+              </div>
               <div style={{ color: R.gray, fontSize: 15, marginTop: 2 }}>@{user?.name}</div>
+              {/* Emoji picker */}
+              {showEmojiPicker && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "center", marginTop: 8, background: R.search, border: `1px solid #2a2a2a`, borderRadius: 12, padding: 8, maxWidth: 220 }}>
+                  {PROFILE_EMOJIS.map((e) => (
+                    <button
+                      key={e || "none"}
+                      onClick={async () => { setShowEmojiPicker(false); await onUpdateProfileEmoji(e); }}
+                      style={{ width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", background: user?.profileEmoji === e ? `${accent}30` : "transparent", border: user?.profileEmoji === e ? `1px solid ${accent}` : "1px solid transparent", borderRadius: 8, cursor: "pointer", fontSize: 16 }}
+                    >
+                      {e || <X size={14} style={{ color: R.gray }} />}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             {/* Action button */}
             {isOwnProfile ? (
@@ -1544,7 +1570,7 @@ function SearchView({ onNavigateToProfile, accent = DEFAULT_ACCENT }) {
         >
           <Avatar src={u.avatar} size={48} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 700, color: R.text, fontSize: 15 }}>{u.displayName}</div>
+            <div style={{ fontWeight: 700, color: R.text, fontSize: 15 }}>{u.displayName} {u.profileEmoji && <span style={{ fontSize: 13 }}>{u.profileEmoji}</span>}</div>
             <div style={{ color: R.gray, fontSize: 14 }}>@{u.username}</div>
           </div>
           <ArrowLeft size={16} style={{ color: R.gray, transform: "rotate(180deg)", flexShrink: 0 }} />
@@ -1949,8 +1975,8 @@ function AuthView() {
         style={{ width: "100%", maxWidth: 440, padding: 32 }}
       >
         <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <span style={{ fontSize: 48, fontWeight: 900, color: DEFAULT_ACCENT }}>R</span>
-          <div style={{ fontSize: 14, color: R.gray, marginTop: 4, letterSpacing: 2, textTransform: "uppercase" }}>recess</div>
+          <span style={{ fontSize: 48, fontWeight: 900, color: DEFAULT_ACCENT }}>N</span>
+          <div style={{ fontSize: 14, color: R.gray, marginTop: 4, letterSpacing: 2, textTransform: "uppercase" }}>nosta</div>
         </div>
         <h1 style={{ fontSize: 31, fontWeight: 800, color: R.text, marginBottom: 32, textAlign: "center" }}>
           {isSignUp ? "Create your account" : "Welcome back"}
@@ -2027,7 +2053,7 @@ function MobileTopBar({ view, isOwnProfile, onBack, onNavigateHome, onNavigatePr
         {leftIcon}
       </div>
       <span onClick={onNavigateHome} style={{ fontSize: 20, fontWeight: 900, color: accent, cursor: "pointer", letterSpacing: -0.5 }}>
-        recess
+        nosta
       </span>
       <div style={{ width: 40, display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
         {rightIcon}
@@ -2039,6 +2065,8 @@ function MobileTopBar({ view, isOwnProfile, onBack, onNavigateHome, onNavigatePr
 // ─── Status Section ──────────────────────────────────────────────────────
 
 const MOOD_EMOJIS = ["💭", "😊", "😴", "🎵", "🔥", "💀", "🌙", "☕", "🎮", "📚", "🏃", "🧘"];
+
+const PROFILE_EMOJIS = ["", "💩", "👍", "⭐", "✨", "🔥", "💎", "🎵", "🎨", "🏆", "👑", "🦋", "🌙", "☀️", "🌈", "🍀", "💀", "👻", "🤖", "🎯", "💜", "🖤", "💚", "❤️"];
 
 function StatusSection({ status, isOwnProfile, onUpdateStatus, accent = DEFAULT_ACCENT }) {
   const [editing, setEditing] = useState(false);
@@ -2106,7 +2134,7 @@ function StatusSection({ status, isOwnProfile, onUpdateStatus, accent = DEFAULT_
 
 // ─── Mobile Profile View ─────────────────────────────────────────────────
 
-function MobileProfileView({ user, posts, top8, appUserId, viewedUserId, isOwnProfile, isFollowing, onFollowToggle, onNavigateToProfile, onSendMessage, onUpdateStatus, onUpdateInterests, onAvatarUpload, userStatus, likedPostIds, repostedPostIds, onToggleLike, onToggleRepost, onDeletePost, accent = DEFAULT_ACCENT }) {
+function MobileProfileView({ user, posts, top8, appUserId, viewedUserId, isOwnProfile, isFollowing, onFollowToggle, onNavigateToProfile, onSendMessage, onUpdateStatus, onUpdateInterests, onAvatarUpload, onUpdateProfileEmoji, userStatus, likedPostIds, repostedPostIds, onToggleLike, onToggleRepost, onDeletePost, accent = DEFAULT_ACCENT }) {
   const [editingBio, setEditingBio] = useState(false);
   const [editBioText, setEditBioText] = useState("");
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
@@ -2115,6 +2143,7 @@ function MobileProfileView({ user, posts, top8, appUserId, viewedUserId, isOwnPr
   const avatarInputRef = useRef(null);
   const [editingInterests, setEditingInterests] = useState(false);
   const [editInterestsText, setEditInterestsText] = useState("");
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [expandedReplies, setExpandedReplies] = useState(new Set());
   const [repliesCache, setRepliesCache] = useState({});
 
@@ -2263,7 +2292,26 @@ function MobileProfileView({ user, posts, top8, appUserId, viewedUserId, isOwnPr
 
       {/* Name + handle */}
       <div style={{ textAlign: "center", padding: "8px 16px 4px" }}>
-        <div style={{ fontSize: 20, fontWeight: 800, color: R.text }}>{user?.displayName || "Profile"}</div>
+        <div style={{ fontSize: 20, fontWeight: 800, color: R.text, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+          {user?.displayName || "Profile"}
+          {isOwnProfile && onUpdateProfileEmoji ? (
+            <span onClick={(e) => { e.stopPropagation(); setShowEmojiPicker(!showEmojiPicker); }} style={{ cursor: "pointer", fontSize: 18, opacity: user?.profileEmoji ? 1 : 0.4 }} title="Change badge emoji">
+              {user?.profileEmoji || "＋"}
+            </span>
+          ) : (
+            user?.profileEmoji && <span style={{ fontSize: 18 }}>{user.profileEmoji}</span>
+          )}
+        </div>
+        {showEmojiPicker && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "center", marginTop: 8, background: R.search, border: `1px solid #2a2a2a`, borderRadius: 12, padding: 8, maxWidth: 220, margin: "8px auto 0" }}>
+            {PROFILE_EMOJIS.map((e) => (
+              <button key={e || "none"} onClick={async () => { setShowEmojiPicker(false); await onUpdateProfileEmoji(e); }}
+                style={{ width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", background: user?.profileEmoji === e ? `${accent}30` : "transparent", border: user?.profileEmoji === e ? `1px solid ${accent}` : "1px solid transparent", borderRadius: 8, cursor: "pointer", fontSize: 16, padding: 0 }}>
+                {e || <X size={14} style={{ color: R.gray }} />}
+              </button>
+            ))}
+          </div>
+        )}
         <div style={{ color: R.gray, fontSize: 14, marginTop: 2 }}>@{user?.name}</div>
       </div>
 
@@ -2721,6 +2769,13 @@ export default function App() {
     if (u) setUser(u);
   }, [appUserId]);
 
+  const handleUpdateProfileEmoji = useCallback(async (emoji) => {
+    if (!appUserId) return;
+    await updateProfileEmoji(appUserId, emoji);
+    const u = await fetchUser(appUserId);
+    if (u) setUser(u);
+  }, [appUserId]);
+
   const handleSetView = useCallback((v) => {
     if (v === "profile") { setViewedUserId(null); }
     if (v === "notifications") { handleOpenNotifications(); return; }
@@ -2830,6 +2885,7 @@ export default function App() {
                 onUpdateStatus={handleUpdateStatus}
                 onUpdateInterests={handleUpdateInterests}
                 onAvatarUpload={handleAvatarUpload}
+                onUpdateProfileEmoji={handleUpdateProfileEmoji}
                 userStatus={isOwnProfile ? userStatus : viewedUserStatus}
                 likedPostIds={likedPostIds}
                 repostedPostIds={repostedPostIds}
@@ -2869,6 +2925,7 @@ export default function App() {
                 userStatus={isOwnProfile ? userStatus : viewedUserStatus}
                 onUpdateStatus={handleUpdateStatus}
                 onUpdateInterests={handleUpdateInterests}
+                onUpdateProfileEmoji={handleUpdateProfileEmoji}
               />
             )
           )}

@@ -13,7 +13,7 @@ export async function fetchUser(userId) {
   try {
     const { data, error } = await supabase
       .from("users")
-      .select("username, display_name, bio, avatar_url, created_at, follower_count, following_count, interests")
+      .select("username, display_name, bio, avatar_url, created_at, follower_count, following_count, interests, profile_emoji")
       .eq("id", userId)
       .single();
 
@@ -28,9 +28,10 @@ export async function fetchUser(userId) {
       followers: data.follower_count,
       following: data.following_count,
       interests: data.interests || "",
+      profileEmoji: data.profile_emoji || "",
     };
   } catch (err) {
-    // Fallback: try without interests column (migration may not have run yet)
+    // Fallback: try without newer columns (migrations may not have run yet)
     try {
       const { data, error } = await supabase
         .from("users")
@@ -49,6 +50,7 @@ export async function fetchUser(userId) {
         followers: data.follower_count,
         following: data.following_count,
         interests: "",
+        profileEmoji: "",
       };
     } catch (err2) {
       console.error("fetchUser failed:", err2);
@@ -62,7 +64,7 @@ export async function fetchPosts({ limit = 20, before = null } = {}) {
   try {
     let query = supabase
       .from("posts")
-      .select("id, content, created_at, like_count, reply_count, repost_count, user_id, room, users!posts_user_id_fkey(username, human_verified, avatar_url, display_name)")
+      .select("id, content, created_at, like_count, reply_count, repost_count, user_id, room, users!posts_user_id_fkey(username, human_verified, avatar_url, display_name, profile_emoji)")
       .order("created_at", { ascending: false })
       .limit(limit);
 
@@ -79,6 +81,7 @@ export async function fetchPosts({ limit = 20, before = null } = {}) {
       user: p.users.username,
       displayName: p.users.display_name,
       avatar: p.users.avatar_url,
+      profileEmoji: p.users.profile_emoji || "",
       content: p.content,
       timestamp: new Date(p.created_at).getTime(),
       createdAt: p.created_at,
@@ -237,7 +240,7 @@ export async function fetchUserPosts(userId) {
   try {
     const { data, error } = await supabase
       .from("posts")
-      .select("id, content, created_at, like_count, reply_count, repost_count, user_id, room, users!posts_user_id_fkey(username, human_verified, avatar_url, display_name)")
+      .select("id, content, created_at, like_count, reply_count, repost_count, user_id, room, users!posts_user_id_fkey(username, human_verified, avatar_url, display_name, profile_emoji)")
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
 
@@ -249,6 +252,7 @@ export async function fetchUserPosts(userId) {
       user: p.users.username,
       displayName: p.users.display_name,
       avatar: p.users.avatar_url,
+      profileEmoji: p.users.profile_emoji || "",
       content: p.content,
       timestamp: new Date(p.created_at).getTime(),
       createdAt: p.created_at,
@@ -475,7 +479,7 @@ export async function searchUsers(query) {
   try {
     const { data, error } = await supabase
       .from("users")
-      .select("id, username, display_name, avatar_url")
+      .select("id, username, display_name, avatar_url, profile_emoji")
       .or(`username.ilike.%${query}%,display_name.ilike.%${query}%`)
       .limit(10);
 
@@ -486,6 +490,7 @@ export async function searchUsers(query) {
       username: u.username,
       displayName: u.display_name,
       avatar: u.avatar_url,
+      profileEmoji: u.profile_emoji || "",
     }));
   } catch (err) {
     console.error("searchUsers failed:", err);
@@ -999,6 +1004,22 @@ export async function updateUserInterests(userId, interests) {
   } catch (err) {
     console.error("updateUserInterests failed:", err);
     return { error: err.message || "Failed to update interests" };
+  }
+}
+
+export async function updateProfileEmoji(userId, emoji) {
+  if (!supabase) return null;
+  try {
+    const { error } = await supabase
+      .from("users")
+      .update({ profile_emoji: emoji })
+      .eq("id", userId);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err) {
+    console.error("updateProfileEmoji failed:", err);
+    return { error: err.message || "Failed to update profile emoji" };
   }
 }
 

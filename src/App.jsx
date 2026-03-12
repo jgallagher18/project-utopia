@@ -613,7 +613,7 @@ function LeftSidebar({ activeView, setView, user, unreadCount, onSignOut, onPost
       {/* Logo */}
       <div style={{ padding: "12px 0" }}>
         <div className="nav-item-hover" onClick={() => setView("feed")} style={{ width: 50, height: 50, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-          <span style={{ fontSize: 24, fontWeight: 900, color: accent }}>R</span>
+          <span style={{ fontSize: 24, fontWeight: 900, color: accent }}>n</span>
         </div>
       </div>
 
@@ -2802,7 +2802,7 @@ export default function App() {
   if (authLoading) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: R.bg }}>
-        <span style={{ fontSize: 64, fontWeight: 900, color: DEFAULT_ACCENT }}>R</span>
+        <span style={{ fontSize: 64, fontWeight: 900, color: DEFAULT_ACCENT }}>n</span>
       </div>
     );
   }

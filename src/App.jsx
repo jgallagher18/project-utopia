@@ -1657,14 +1657,13 @@ function MessagesView({ appUserId, onNavigateToProfile, accent = DEFAULT_ACCENT,
   const messagesEndRef = useRef(null);
   const pollRef = useRef(null);
 
-  // New group creation state
-  const [showNewGroup, setShowNewGroup] = useState(false);
-  const [groupName, setGroupName] = useState("");
-  const [groupSearchQuery, setGroupSearchQuery] = useState("");
-  const [groupSearchResults, setGroupSearchResults] = useState([]);
-  const [selectedMembers, setSelectedMembers] = useState([]);
-  const [creatingGroup, setCreatingGroup] = useState(false);
-  const groupDebounceRef = useRef(null);
+  // New message state
+  const [showNewMessage, setShowNewMessage] = useState(false);
+  const [dmSearchQuery, setDmSearchQuery] = useState("");
+  const [dmSearchResults, setDmSearchResults] = useState([]);
+  const [startingDm, setStartingDm] = useState(false);
+  const [dmError, setDmError] = useState(null);
+  const dmDebounceRef = useRef(null);
 
   useEffect(() => {
     if (!appUserId) return;
@@ -1687,16 +1686,16 @@ function MessagesView({ appUserId, onNavigateToProfile, accent = DEFAULT_ACCENT,
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  // Group member search
+  // DM search
   useEffect(() => {
-    if (!groupSearchQuery.trim()) { setGroupSearchResults([]); return; }
-    clearTimeout(groupDebounceRef.current);
-    groupDebounceRef.current = setTimeout(async () => {
-      const data = await searchUsers(groupSearchQuery);
-      setGroupSearchResults(data.filter((u) => u.id !== appUserId && !selectedMembers.some((m) => m.id === u.id)));
+    if (!dmSearchQuery.trim()) { setDmSearchResults([]); return; }
+    clearTimeout(dmDebounceRef.current);
+    dmDebounceRef.current = setTimeout(async () => {
+      const data = await searchUsers(dmSearchQuery);
+      setDmSearchResults((data || []).filter((u) => u.id !== appUserId));
     }, 300);
-    return () => clearTimeout(groupDebounceRef.current);
-  }, [groupSearchQuery, appUserId, selectedMembers]);
+    return () => clearTimeout(dmDebounceRef.current);
+  }, [dmSearchQuery, appUserId]);
 
   const handleSend = async () => {
     const text = messageText.trim();
@@ -1711,30 +1710,22 @@ function MessagesView({ appUserId, onNavigateToProfile, accent = DEFAULT_ACCENT,
     setSending(false);
   };
 
-  const handleCreateGroup = async () => {
-    if (!appUserId || selectedMembers.length < 1) return;
-    setCreatingGroup(true);
-    const convoId = await createGroupConversation(appUserId, selectedMembers.map((m) => m.id), groupName.trim() || undefined);
-    if (convoId) {
+  const handleStartDm = async (targetUser) => {
+    if (!appUserId || startingDm) return;
+    setStartingDm(true);
+    setDmError(null);
+    const result = await getOrCreateConversation(appUserId, targetUser.id);
+    if (result && typeof result === "string") {
       const convos = await fetchConversations(appUserId);
       if (convos) setConversations(convos);
-      setActiveConvoId(convoId);
+      setActiveConvoId(result);
+      setShowNewMessage(false);
+      setDmSearchQuery("");
+      setDmSearchResults([]);
+    } else {
+      setDmError(result?.error || "Could not start conversation. Check Supabase policies.");
     }
-    setShowNewGroup(false);
-    setGroupName("");
-    setSelectedMembers([]);
-    setGroupSearchQuery("");
-    setCreatingGroup(false);
-  };
-
-  const addMember = (user) => {
-    setSelectedMembers((prev) => [...prev, user]);
-    setGroupSearchQuery("");
-    setGroupSearchResults([]);
-  };
-
-  const removeMember = (userId) => {
-    setSelectedMembers((prev) => prev.filter((m) => m.id !== userId));
+    setStartingDm(false);
   };
 
   const activeConvo = conversations.find((c) => c.id === activeConvoId);
@@ -1755,16 +1746,16 @@ function MessagesView({ appUserId, onNavigateToProfile, accent = DEFAULT_ACCENT,
         <div style={{ padding: "12px 16px", borderBottom: `1px solid ${R.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <h2 style={{ fontSize: 20, fontWeight: 800, color: R.text }}>Messages</h2>
           <button
-            onClick={() => setShowNewGroup(!showNewGroup)}
+            onClick={() => { setShowNewMessage(!showNewMessage); setDmSearchQuery(""); setDmSearchResults([]); }}
             style={{ background: "none", border: `1px solid ${R.border}`, color: accent, borderRadius: 20, padding: "4px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 4 }}
           >
-            <Plus size={14} /> New Group
+            <Plus size={14} /> New Message
           </button>
         </div>
 
-        {/* New Group Panel */}
+        {/* New Message Panel */}
         <AnimatePresence>
-          {showNewGroup && (
+          {showNewMessage && (
             <motion.div
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}
@@ -1774,55 +1765,41 @@ function MessagesView({ appUserId, onNavigateToProfile, accent = DEFAULT_ACCENT,
               <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
                 <input
                   type="text"
-                  value={groupName}
-                  onChange={(e) => setGroupName(e.target.value)}
-                  placeholder="Group name (optional)"
-                  maxLength={50}
+                  value={dmSearchQuery}
+                  onChange={(e) => setDmSearchQuery(e.target.value)}
+                  placeholder="Search for someone..."
+                  autoFocus
                   style={{ background: R.search, border: `1px solid ${R.border}`, borderRadius: 20, padding: "8px 16px", color: R.text, fontSize: 14, fontFamily: "inherit" }}
                 />
-                <input
-                  type="text"
-                  value={groupSearchQuery}
-                  onChange={(e) => setGroupSearchQuery(e.target.value)}
-                  placeholder="Search people to add..."
-                  style={{ background: R.search, border: `1px solid ${R.border}`, borderRadius: 20, padding: "8px 16px", color: R.text, fontSize: 14, fontFamily: "inherit" }}
-                />
-                {/* Search results */}
-                {groupSearchResults.length > 0 && (
-                  <div style={{ background: R.card, borderRadius: 12, maxHeight: 150, overflowY: "auto" }}>
-                    {groupSearchResults.map((u) => (
-                      <div key={u.id} onClick={() => addMember(u)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", cursor: "pointer", fontSize: 14 }}
+                {dmSearchResults.length > 0 && (
+                  <div style={{ background: R.card, borderRadius: 12, maxHeight: 200, overflowY: "auto" }}>
+                    {dmSearchResults.map((u) => (
+                      <div key={u.id} onClick={() => handleStartDm(u)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", cursor: "pointer", fontSize: 14 }}
                         onMouseEnter={(e) => e.currentTarget.style.background = R.hover}
                         onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
                       >
-                        <Avatar src={u.avatar} size={28} />
+                        <Avatar src={u.avatar} size={32} />
                         <div>
-                          <div style={{ fontWeight: 700, color: R.text }}>{u.displayName}</div>
+                          <div style={{ fontWeight: 700, color: R.text }}>{u.displayName} {u.profileEmoji && <span style={{ fontSize: 13 }}>{u.profileEmoji}</span>}</div>
                           <div style={{ color: R.gray, fontSize: 12 }}>@{u.username}</div>
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
-                {/* Selected members */}
-                {selectedMembers.length > 0 && (
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    {selectedMembers.map((m) => (
-                      <span key={m.id} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: `${accent}20`, color: accent, padding: "4px 10px", borderRadius: 20, fontSize: 13, fontWeight: 600 }}>
-                        @{m.username}
-                        <X size={12} style={{ cursor: "pointer" }} onClick={() => removeMember(m.id)} />
-                      </span>
-                    ))}
+                {dmSearchQuery.trim() && dmSearchResults.length === 0 && !startingDm && (
+                  <div style={{ color: R.gray, fontSize: 13, textAlign: "center", padding: 8 }}>No users found</div>
+                )}
+                {startingDm && (
+                  <div style={{ color: R.gray, fontSize: 13, textAlign: "center", padding: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                    <Loader2 size={14} className="spin" /> Starting conversation...
                   </div>
                 )}
-                <button
-                  onClick={handleCreateGroup}
-                  disabled={creatingGroup || selectedMembers.length < 1}
-                  className="post-btn-main"
-                  style={{ background: accent, color: "#fff", border: "none", borderRadius: 20, padding: "8px 16px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", opacity: creatingGroup || selectedMembers.length < 1 ? 0.5 : 1 }}
-                >
-                  {creatingGroup ? "Creating..." : `Create Group (${selectedMembers.length + 1} members)`}
-                </button>
+                {dmError && (
+                  <div style={{ color: "#ef4444", fontSize: 13, textAlign: "center", padding: 8, background: "#ef444415", borderRadius: 8 }}>
+                    {dmError}
+                  </div>
+                )}
               </div>
             </motion.div>
           )}
@@ -2737,8 +2714,8 @@ export default function App() {
 
   const handleSendMessage = useCallback(async (targetUserId) => {
     if (!appUserId) return;
-    const convoId = await getOrCreateConversation(appUserId, targetUserId);
-    if (convoId) { setPendingConvoId(convoId); setView("messages"); }
+    const result = await getOrCreateConversation(appUserId, targetUserId);
+    if (result && typeof result === "string") { setPendingConvoId(result); setView("messages"); }
   }, [appUserId]);
 
   const handleAvatarUpload = useCallback(async (file) => {

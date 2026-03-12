@@ -634,18 +634,20 @@ export async function getOrCreateConversation(userId1, userId2) {
     // Normalize order so user1_id < user2_id
     const [u1, u2] = userId1 < userId2 ? [userId1, userId2] : [userId2, userId1];
 
-    const { data: existing } = await supabase
+    const { data: existing, error: selectError } = await supabase
       .from("conversations")
       .select("id")
+      .eq("is_group", false)
       .eq("user1_id", u1)
       .eq("user2_id", u2)
       .maybeSingle();
 
+    if (selectError) console.error("getOrCreateConversation select error:", selectError);
     if (existing) return existing.id;
 
     const { data, error } = await supabase
       .from("conversations")
-      .insert({ user1_id: u1, user2_id: u2 })
+      .insert({ user1_id: u1, user2_id: u2, is_group: false })
       .select("id")
       .single();
 
@@ -653,7 +655,7 @@ export async function getOrCreateConversation(userId1, userId2) {
     return data.id;
   } catch (err) {
     console.error("getOrCreateConversation failed:", err);
-    return null;
+    return { error: err.message || "Failed to create conversation" };
   }
 }
 
@@ -743,18 +745,22 @@ export async function createGroupConversation(creatorId, memberIds, name) {
 
     if (convoError) throw convoError;
 
-    // Add all members (including creator)
-    const allMembers = [creatorId, ...memberIds.filter((id) => id !== creatorId)];
-    const membersToInsert = allMembers.map((uid) => ({
-      conversation_id: convo.id,
-      user_id: uid,
-    }));
-
-    const { error: membersError } = await supabase
+    // Add creator first (so RLS sees us as a member for subsequent inserts)
+    const { error: creatorError } = await supabase
       .from("conversation_members")
-      .insert(membersToInsert);
+      .insert({ conversation_id: convo.id, user_id: creatorId });
 
-    if (membersError) throw membersError;
+    if (creatorError) throw creatorError;
+
+    // Then add other members
+    const otherMembers = memberIds.filter((id) => id !== creatorId);
+    if (otherMembers.length > 0) {
+      const { error: membersError } = await supabase
+        .from("conversation_members")
+        .insert(otherMembers.map((uid) => ({ conversation_id: convo.id, user_id: uid })));
+
+      if (membersError) throw membersError;
+    }
 
     return convo.id;
   } catch (err) {

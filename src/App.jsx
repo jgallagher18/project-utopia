@@ -1220,12 +1220,11 @@ function ProfileView({ user, posts, top8, playlist, appUserId, viewedUserId, onU
             <div style={{ textAlign: "center" }}>
               <div style={{ fontSize: 20, fontWeight: 800, color: R.text, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
                 {user?.displayName}
-                {isOwnProfile && onUpdateProfileEmoji ? (
-                  <span onClick={(e) => { e.stopPropagation(); setShowEmojiPicker(!showEmojiPicker); }} style={{ cursor: "pointer", fontSize: 18, opacity: user?.profileEmoji ? 1 : 0.4 }} title="Change badge emoji">
-                    {user?.profileEmoji || "＋"}
+                {user?.profileEmoji && <span style={{ fontSize: 18 }}>{user.profileEmoji}</span>}
+                {isOwnProfile && onUpdateProfileEmoji && (
+                  <span onClick={(e) => { e.stopPropagation(); setShowEmojiPicker(!showEmojiPicker); }} style={{ cursor: "pointer", fontSize: 13, opacity: 0.5, marginLeft: 2 }} title="Change badge emoji">
+                    <Pencil size={13} />
                   </span>
-                ) : (
-                  user?.profileEmoji && <span style={{ fontSize: 18 }}>{user.profileEmoji}</span>
                 )}
               </div>
               <div style={{ color: R.gray, fontSize: 15, marginTop: 2 }}>@{user?.name}</div>
@@ -2294,12 +2293,11 @@ function MobileProfileView({ user, posts, top8, appUserId, viewedUserId, isOwnPr
       <div style={{ textAlign: "center", padding: "8px 16px 4px" }}>
         <div style={{ fontSize: 20, fontWeight: 800, color: R.text, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
           {user?.displayName || "Profile"}
-          {isOwnProfile && onUpdateProfileEmoji ? (
-            <span onClick={(e) => { e.stopPropagation(); setShowEmojiPicker(!showEmojiPicker); }} style={{ cursor: "pointer", fontSize: 18, opacity: user?.profileEmoji ? 1 : 0.4 }} title="Change badge emoji">
-              {user?.profileEmoji || "＋"}
+          {user?.profileEmoji && <span style={{ fontSize: 18 }}>{user.profileEmoji}</span>}
+          {isOwnProfile && onUpdateProfileEmoji && (
+            <span onClick={(e) => { e.stopPropagation(); setShowEmojiPicker(!showEmojiPicker); }} style={{ cursor: "pointer", fontSize: 13, opacity: 0.5, marginLeft: 2 }} title="Change badge emoji">
+              <Pencil size={13} />
             </span>
-          ) : (
-            user?.profileEmoji && <span style={{ fontSize: 18 }}>{user.profileEmoji}</span>
           )}
         </div>
         {showEmojiPicker && (

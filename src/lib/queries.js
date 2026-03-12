@@ -420,7 +420,7 @@ export async function addToTop8(followerId, followingId) {
       .limit(1);
 
     const nextPos = existing && existing.length > 0 ? existing[0].position + 1 : 1;
-    if (nextPos > 8) return { error: "Top 8 is full" };
+    if (nextPos > 4) return { error: "Top 4 is full" };
 
     const { error } = await supabase
       .from("relationships")

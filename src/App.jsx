@@ -1120,6 +1120,20 @@ function ProfileView({ user, posts, top8, playlist, appUserId, viewedUserId, onU
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
   const [showAvatarLightbox, setShowAvatarLightbox] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showAddFriend, setShowAddFriend] = useState(false);
+  const [friendSearchQuery, setFriendSearchQuery] = useState("");
+  const [friendSearchResults, setFriendSearchResults] = useState([]);
+  const friendDebounceRef = useRef(null);
+
+  useEffect(() => {
+    if (!friendSearchQuery.trim()) { setFriendSearchResults([]); return; }
+    clearTimeout(friendDebounceRef.current);
+    friendDebounceRef.current = setTimeout(async () => {
+      const data = await searchUsers(friendSearchQuery);
+      setFriendSearchResults((data || []).filter((u) => u.id !== appUserId && !top8.some((f) => f.userId === u.id)));
+    }, 300);
+    return () => clearTimeout(friendDebounceRef.current);
+  }, [friendSearchQuery, appUserId, top8]);
 
   const handleToggleReplies = async (postId) => {
     const next = new Set(expandedReplies);
@@ -1296,6 +1310,57 @@ function ProfileView({ user, posts, top8, playlist, appUserId, viewedUserId, onU
           <span style={{ color: R.gray }}>·</span>
           <span><strong style={{ color: R.text, fontWeight: 800 }}>{posts.length}</strong> <span style={{ color: R.gray }}>Posts</span></span>
         </div>
+
+        {/* Top 4 Friends */}
+        {(top8.length > 0 || isOwnProfile) && (
+          <div style={{ marginTop: 16, position: "relative" }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: R.gray, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5, textAlign: "center" }}>Top Friends</div>
+            <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+              {top8.slice(0, 4).map((friend) => (
+                <div key={friend.id} style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", flexShrink: 0 }}
+                  onClick={() => onNavigateToProfile?.(friend.userId)}
+                >
+                  <div style={{ width: 48, height: 48, borderRadius: 10, background: R.search, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", border: `1px solid #2a2a2a` }}>
+                    <User size={20} style={{ color: R.gray }} />
+                  </div>
+                  {isOwnProfile && onRemoveFromTop8 && (
+                    <button onClick={(e) => { e.stopPropagation(); onRemoveFromTop8(friend.userId); }} style={{ position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: 9, background: "#333", border: "none", color: R.gray, fontSize: 10, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                      <X size={10} />
+                    </button>
+                  )}
+                  <span style={{ fontSize: 11, color: R.gray, maxWidth: 52, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "center" }}>{friend.label}</span>
+                </div>
+              ))}
+              {isOwnProfile && top8.length < 4 && (
+                <div onClick={() => { setShowAddFriend(!showAddFriend); setFriendSearchQuery(""); setFriendSearchResults([]); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", flexShrink: 0 }}>
+                  <div style={{ width: 48, height: 48, borderRadius: 10, background: R.search, display: "flex", alignItems: "center", justifyContent: "center", border: `1px dashed #333` }}>
+                    <Plus size={20} style={{ color: R.gray }} />
+                  </div>
+                  <span style={{ fontSize: 11, color: R.gray }}>Add</span>
+                </div>
+              )}
+            </div>
+            {/* Add friend search popover */}
+            {showAddFriend && (
+              <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", top: "100%", marginTop: 8, width: 260, background: R.card, border: `1px solid ${R.border}`, borderRadius: 16, padding: 12, zIndex: 30 }}>
+                <input type="text" value={friendSearchQuery} onChange={(e) => setFriendSearchQuery(e.target.value)} placeholder="Search to add friend..." autoFocus
+                  style={{ width: "100%", background: R.search, border: `1px solid ${R.border}`, borderRadius: 20, padding: "8px 14px", color: R.text, fontSize: 13, fontFamily: "inherit", marginBottom: 8 }} />
+                {friendSearchResults.map((u) => (
+                  <div key={u.id} onClick={async () => { await onAddToTop8?.(u.id); setShowAddFriend(false); setFriendSearchQuery(""); }}
+                    style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", cursor: "pointer", borderRadius: 8, fontSize: 13 }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = R.hover} onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
+                    <Avatar src={u.avatar} size={28} />
+                    <div>
+                      <div style={{ fontWeight: 700, color: R.text }}>{u.displayName}</div>
+                      <div style={{ color: R.gray, fontSize: 11 }}>@{u.username}</div>
+                    </div>
+                  </div>
+                ))}
+                {friendSearchQuery.trim() && friendSearchResults.length === 0 && <div style={{ color: R.gray, fontSize: 12, textAlign: "center", padding: 4 }}>No users found</div>}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Bio edit modal */}
@@ -1365,46 +1430,6 @@ function ProfileView({ user, posts, top8, playlist, appUserId, viewedUserId, onU
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* ═══ Friends Card ═══ */}
-      <div className="profile-section-card">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontWeight: 700, color: R.text, fontSize: 16 }}>Friends</span>
-            <span style={{ color: R.gray, fontSize: 14 }}>{top8.length}</span>
-          </div>
-          {top8.length > 0 && <span style={{ color: accent, fontSize: 14, cursor: "pointer" }}>See all</span>}
-        </div>
-        {top8.length === 0 ? (
-          <div style={{ textAlign: "center", padding: 16, color: R.gray, fontSize: 14 }}>
-            <Users size={24} style={{ color: R.gray, marginBottom: 8 }} />
-            <div>No friends yet</div>
-          </div>
-        ) : (
-          <div style={{ display: "flex", gap: 16, overflow: "hidden" }}>
-            {top8.slice(0, 8).map((friend) => (
-              <div
-                key={friend.id}
-                onClick={() => onNavigateToProfile?.(friend.userId)}
-                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, cursor: "pointer", flexShrink: 0 }}
-              >
-                <div style={{ width: 64, height: 64, borderRadius: 10, border: `1px solid #2a2a2a`, background: R.search, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", transition: "filter 150ms ease" }}
-                  onMouseEnter={(e) => e.currentTarget.style.filter = "brightness(1.2)"}
-                  onMouseLeave={(e) => e.currentTarget.style.filter = "brightness(1)"}
-                >
-                  <User size={24} style={{ color: R.gray }} />
-                </div>
-                <span style={{ fontSize: 12, color: "#aaa", maxWidth: 64, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "center", transition: "color 150ms ease" }}
-                  onMouseEnter={(e) => e.currentTarget.style.color = "#fff"}
-                  onMouseLeave={(e) => e.currentTarget.style.color = "#aaa"}
-                >
-                  {friend.label}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
 
       {/* ═══ Status Section ═══ */}
       {/* Status compose (own profile only) */}
@@ -1530,7 +1555,6 @@ function SearchView({ onNavigateToProfile, accent = DEFAULT_ACCENT }) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search users..."
-            autoFocus
             className="search-input"
             style={{ width: "100%", height: 44, borderRadius: 9999, background: R.search, border: `1px solid ${R.border}`, padding: "0 16px 0 44px", color: R.text, fontSize: 15, fontFamily: "inherit" }}
           />
@@ -1561,11 +1585,11 @@ function SearchView({ onNavigateToProfile, accent = DEFAULT_ACCENT }) {
       )}
 
       {results.map((u) => (
-        <div
+        <a
           key={u.id}
-          onClick={() => onNavigateToProfile(u.id)}
-          className="tweet-hover"
-          style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", cursor: "pointer", borderBottom: `1px solid ${R.border}` }}
+          href="#"
+          onClick={(e) => { e.preventDefault(); onNavigateToProfile(u.id); }}
+          style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", cursor: "pointer", borderBottom: `1px solid ${R.border}`, textDecoration: "none", color: "inherit", touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
         >
           <Avatar src={u.avatar} size={48} />
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -1573,7 +1597,7 @@ function SearchView({ onNavigateToProfile, accent = DEFAULT_ACCENT }) {
             <div style={{ color: R.gray, fontSize: 14 }}>@{u.username}</div>
           </div>
           <ArrowLeft size={16} style={{ color: R.gray, transform: "rotate(180deg)", flexShrink: 0 }} />
-        </div>
+        </a>
       ))}
     </div>
   );
@@ -2110,7 +2134,7 @@ function StatusSection({ status, isOwnProfile, onUpdateStatus, accent = DEFAULT_
 
 // ─── Mobile Profile View ─────────────────────────────────────────────────
 
-function MobileProfileView({ user, posts, top8, appUserId, viewedUserId, isOwnProfile, isFollowing, onFollowToggle, onNavigateToProfile, onSendMessage, onUpdateStatus, onUpdateInterests, onAvatarUpload, onUpdateProfileEmoji, userStatus, likedPostIds, repostedPostIds, onToggleLike, onToggleRepost, onDeletePost, accent = DEFAULT_ACCENT }) {
+function MobileProfileView({ user, posts, top8, appUserId, viewedUserId, isOwnProfile, isFollowing, onFollowToggle, onNavigateToProfile, onSendMessage, onUpdateStatus, onUpdateInterests, onAvatarUpload, onUpdateProfileEmoji, onAddToTop8, onRemoveFromTop8, userStatus, likedPostIds, repostedPostIds, onToggleLike, onToggleRepost, onDeletePost, accent = DEFAULT_ACCENT }) {
   const [editingBio, setEditingBio] = useState(false);
   const [editBioText, setEditBioText] = useState("");
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
@@ -2120,8 +2144,22 @@ function MobileProfileView({ user, posts, top8, appUserId, viewedUserId, isOwnPr
   const [editingInterests, setEditingInterests] = useState(false);
   const [editInterestsText, setEditInterestsText] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showAddFriend, setShowAddFriend] = useState(false);
+  const [friendSearchQuery, setFriendSearchQuery] = useState("");
+  const [friendSearchResults, setFriendSearchResults] = useState([]);
+  const friendDebounceRef = useRef(null);
   const [expandedReplies, setExpandedReplies] = useState(new Set());
   const [repliesCache, setRepliesCache] = useState({});
+
+  useEffect(() => {
+    if (!friendSearchQuery.trim()) { setFriendSearchResults([]); return; }
+    clearTimeout(friendDebounceRef.current);
+    friendDebounceRef.current = setTimeout(async () => {
+      const data = await searchUsers(friendSearchQuery);
+      setFriendSearchResults((data || []).filter((u) => u.id !== appUserId && !top8.some((f) => f.userId === u.id)));
+    }, 300);
+    return () => clearTimeout(friendDebounceRef.current);
+  }, [friendSearchQuery, appUserId, top8]);
 
   const handleToggleReplies = async (postId) => {
     const next = new Set(expandedReplies);
@@ -2316,20 +2354,52 @@ function MobileProfileView({ user, posts, top8, appUserId, viewedUserId, isOwnPr
         <span><strong style={{ color: R.text, fontWeight: 800 }}>{formatCount(user?.followers || 0)}</strong> <span style={{ color: R.gray }}>Followers</span></span>
       </div>
 
-      {/* Friends row */}
-      {top8.length > 0 && (
-        <div style={{ padding: "0 16px 12px" }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: R.gray, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>Friends</div>
-          <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 4 }}>
-            {top8.map((friend) => (
-              <div key={friend.id} onClick={() => onNavigateToProfile?.(friend.userId)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", flexShrink: 0 }}>
-                <div style={{ width: 48, height: 48, borderRadius: 10, background: R.search, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+      {/* Top 4 Friends */}
+      {(top8.length > 0 || isOwnProfile) && (
+        <div style={{ padding: "0 16px 12px", position: "relative" }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: R.gray, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>Top Friends</div>
+          <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+            {top8.slice(0, 4).map((friend) => (
+              <div key={friend.id} style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", flexShrink: 0 }}
+                onClick={() => onNavigateToProfile?.(friend.userId)}>
+                <div style={{ width: 48, height: 48, borderRadius: 10, background: R.search, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", border: `1px solid #2a2a2a` }}>
                   <User size={20} style={{ color: R.gray }} />
                 </div>
+                {isOwnProfile && onRemoveFromTop8 && (
+                  <button onClick={(e) => { e.stopPropagation(); onRemoveFromTop8(friend.userId); }} style={{ position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: 9, background: "#333", border: "none", color: R.gray, fontSize: 10, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                    <X size={10} />
+                  </button>
+                )}
                 <span style={{ fontSize: 11, color: R.gray, maxWidth: 56, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "center" }}>{friend.label}</span>
               </div>
             ))}
+            {isOwnProfile && top8.length < 4 && (
+              <div onClick={() => { setShowAddFriend(!showAddFriend); setFriendSearchQuery(""); setFriendSearchResults([]); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", flexShrink: 0 }}>
+                <div style={{ width: 48, height: 48, borderRadius: 10, background: R.search, display: "flex", alignItems: "center", justifyContent: "center", border: `1px dashed #333` }}>
+                  <Plus size={20} style={{ color: R.gray }} />
+                </div>
+                <span style={{ fontSize: 11, color: R.gray }}>Add</span>
+              </div>
+            )}
           </div>
+          {/* Add friend search */}
+          {showAddFriend && (
+            <div style={{ marginTop: 8, background: R.card, border: `1px solid ${R.border}`, borderRadius: 16, padding: 12 }}>
+              <input type="text" value={friendSearchQuery} onChange={(e) => setFriendSearchQuery(e.target.value)} placeholder="Search to add friend..."
+                style={{ width: "100%", background: R.search, border: `1px solid ${R.border}`, borderRadius: 20, padding: "8px 14px", color: R.text, fontSize: 13, fontFamily: "inherit", marginBottom: 8 }} />
+              {friendSearchResults.map((u) => (
+                <div key={u.id} onClick={async () => { await onAddToTop8?.(u.id); setShowAddFriend(false); setFriendSearchQuery(""); }}
+                  style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", cursor: "pointer", borderRadius: 8, fontSize: 13 }}>
+                  <Avatar src={u.avatar} size={28} />
+                  <div>
+                    <div style={{ fontWeight: 700, color: R.text }}>{u.displayName}</div>
+                    <div style={{ color: R.gray, fontSize: 11 }}>@{u.username}</div>
+                  </div>
+                </div>
+              ))}
+              {friendSearchQuery.trim() && friendSearchResults.length === 0 && <div style={{ color: R.gray, fontSize: 12, textAlign: "center", padding: 4 }}>No users found</div>}
+            </div>
+          )}
         </div>
       )}
 
@@ -2616,12 +2686,24 @@ export default function App() {
 
   const navigateToProfile = useCallback(async (userId) => {
     if (!appUserId) return;
-    if (userId === appUserId) { setViewedUserId(null); setView("profile"); return; }
-    const [userData, postsData, top8Data, playlistData, following, viewedStatus] = await Promise.all([
-      fetchUser(userId), fetchUserPosts(userId), fetchTop8(userId), fetchPlaylist(userId), checkFollowing(appUserId, userId), fetchUserStatus(userId).catch(() => null),
-    ]);
-    setViewedUser(userData); setViewedPosts(postsData || []); setViewedTop8(top8Data || []); setViewedPlaylist(playlistData || []);
-    setIsFollowingViewed(following); setViewedUserStatus(viewedStatus); setViewedUserId(userId); setView("profile");
+    if (userId === appUserId) {
+      setViewedUserId(null);
+      if (!user) { const u = await fetchUser(appUserId).catch(() => null); if (u) setUser(u); }
+      const myP = await fetchUserPosts(appUserId).catch(() => []);
+      if (myP) setOwnPosts(myP);
+      setView("profile");
+      return;
+    }
+    try {
+      const [userData, postsData, top8Data, playlistData, following, viewedStatus] = await Promise.all([
+        fetchUser(userId).catch(() => null), fetchUserPosts(userId).catch(() => []), fetchTop8(userId).catch(() => []), fetchPlaylist(userId).catch(() => []), checkFollowing(appUserId, userId).catch(() => false), fetchUserStatus(userId).catch(() => null),
+      ]);
+      setViewedUser(userData); setViewedPosts(postsData || []); setViewedTop8(top8Data || []); setViewedPlaylist(playlistData || []);
+      setIsFollowingViewed(following); setViewedUserStatus(viewedStatus); setViewedUserId(userId); setView("profile");
+    } catch (err) {
+      console.error("navigateToProfile failed:", err);
+      setViewedUserId(userId); setView("profile");
+    }
   }, [appUserId]);
 
   const handleToggleLike = useCallback(async (postId) => {
@@ -2815,7 +2897,10 @@ export default function App() {
             user={user}
             onBack={() => { setViewedUserId(null); setView("feed"); }}
             onNavigateHome={() => { setViewedUserId(null); setView("feed"); }}
-            onNavigateProfile={() => { setViewedUserId(null); setView("profile"); }}
+            onNavigateProfile={async () => {
+              setViewedUserId(null); setView("profile");
+              if (!user && appUserId) { const u = await fetchUser(appUserId).catch(() => null); if (u) setUser(u); }
+            }}
             onNavigateNotifications={handleOpenNotifications}
             onNavigateMessages={() => setView("messages")}
             onNavigateSettings={() => setView("settings")}
@@ -2844,6 +2929,12 @@ export default function App() {
               customRooms={customRooms}
             />
           )}
+          {view === "profile" && !(isOwnProfile ? user : viewedUser) && (
+            <div style={{ padding: 40, textAlign: "center", color: R.gray }}>
+              <Loader2 size={24} style={{ animation: "spin 1s linear infinite" }} />
+              <div style={{ marginTop: 12, fontSize: 15 }}>Loading profile...</div>
+            </div>
+          )}
           {view === "profile" && (isOwnProfile ? user : viewedUser) && (
             isMobile ? (
               <MobileProfileView
@@ -2867,6 +2958,8 @@ export default function App() {
                 onToggleLike={handleToggleLike}
                 onToggleRepost={handleToggleRepost}
                 onDeletePost={handleDeletePost}
+                onAddToTop8={handleAddToTop8}
+                onRemoveFromTop8={handleRemoveFromTop8}
                 accent={accent}
               />
             ) : (

@@ -7,7 +7,16 @@
       "Bash(npm run:*)",
       "Bash(cp:*)",
       "Bash(gh auth:*)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(gh repo:*)",
+      "Bash(vercel login:*)",
+      "Bash(vercel link:*)",
+      "Bash(vercel env:*)",
+      "Bash(vercel:*)",
+      "Bash(echo:*)",
+      "Bash(supabase projects:*)",
+      "WebFetch(domain:project-utopia-ten.vercel.app)",
+      "mcp__ide__getDiagnostics"
     ]
   }
 }
